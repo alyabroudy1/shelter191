@@ -9,6 +9,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.RemoteException;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
@@ -298,6 +299,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        Log.d("TAG", "onResume: ");
         if (mServiceMain != null && mServiceWork != null && !servicesAlive()) {
             // First, ensure that the services are killed before we restart
             // Otherwise, the system will reuse the services and the new activity

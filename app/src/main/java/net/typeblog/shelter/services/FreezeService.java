@@ -13,6 +13,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.IBinder;
+import android.util.Log;
 
 import androidx.annotation.Nullable;
 
@@ -39,6 +40,7 @@ public class FreezeService extends Service {
     // to the list
     private static List<String> sAppToFreeze = new ArrayList<>();
     public static synchronized void registerAppToFreeze(String app) {
+        Log.d("TAG", "registerAppToFreeze: "+app);
         if (!sAppToFreeze.contains(app)) {
             sAppToFreeze.add(app);
         }
@@ -49,7 +51,7 @@ public class FreezeService extends Service {
     }
 
     // An app being inactive for this amount of time will be frozen
-    private static final long APP_INACTIVE_TIMEOUT = 1000;
+    private static final long APP_INACTIVE_TIMEOUT = 100;
 
     // Notification ID
     private static final int NOTIFICATION_ID = 0xe49c0;
@@ -71,10 +73,18 @@ public class FreezeService extends Service {
 
             // Delay the work so that it can be canceled if the screen
             // gets unlocked before the delay passes
-            mAlarmManager.set(AlarmManager.RTC_WAKEUP,
-                    System.currentTimeMillis() + ((long) SettingsManager.getInstance().getAutoFreezeDelay()) * 1000,
-                    null, mFreezeWork, null);
+//            mAlarmManager.set(AlarmManager.RTC_WAKEUP,
+//                    System.currentTimeMillis() + ((long) SettingsManager.getInstance().getAutoFreezeDelay()) * 1000,
+//                    null, mFreezeWork, null);
+//            mAlarmManager.setExact(AlarmManager.RTC_WAKEUP,
+//                    System.currentTimeMillis(),
+//                    null, mFreezeWork, null);
+//            registerReceiver(mUnlockReceiver, new IntentFilter(Intent.ACTION_SCREEN_ON));
+//            Log.d("TAG", "onReceive: ACTION_SCREEN_ON");
+            Log.d("TAG", "onReceive: ACTION_SCREEN_OFF");
+//            registerReceiver(screenOnReceiver, new IntentFilter(Intent.ACTION_SCREEN_OFF));
             registerReceiver(mUnlockReceiver, new IntentFilter(Intent.ACTION_SCREEN_ON));
+            freezeApps();
         }
     };
 
@@ -83,6 +93,8 @@ public class FreezeService extends Service {
     private BroadcastReceiver mUnlockReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
+            Log.d("TAG", "onReceive: sexy screen on");
+//            freezeApps();
             mAlarmManager.cancel(mFreezeWork);
         }
     };
@@ -101,30 +113,36 @@ public class FreezeService extends Service {
 
     private AlarmManager.OnAlarmListener mFreezeWork = () -> {
         synchronized (FreezeService.class) {
+            Log.d("TAG", "OnAlarmListener mFreezeWork -2 ");
             // Cancel the unlock receiver first - the delay has passed if this work is executed
             unregisterReceiver(mUnlockReceiver);
 
-            if (sAppToFreeze.size() > 0) {
-                DevicePolicyManager dpm = getSystemService(DevicePolicyManager.class);
-                ComponentName adminComponent = new ComponentName(FreezeService.this, ShelterDeviceAdminReceiver.class);
-                for (String app : sAppToFreeze) {
-                    boolean shouldFreeze = true;
-                    UsageStats stats =  mUsageStats.get(app);
-                    if (stats != null && mScreenLockTime - stats.getLastTimeUsed() <= APP_INACTIVE_TIMEOUT &&
-                            stats.getTotalTimeInForeground() >= APP_INACTIVE_TIMEOUT) {
-                        // Don't freeze foreground apps if requested
-                        shouldFreeze = false;
-                    }
-
-                    if (shouldFreeze) {
-                        dpm.setApplicationHidden(adminComponent, app, true);
-                    }
-                }
-                sAppToFreeze.clear();
-            }
+            freezeApps();
             stopSelf();
         }
     };
+
+    private void freezeApps() {
+        Log.d("TAG", "freezeApps");
+        if (sAppToFreeze.size() > 0) {
+            DevicePolicyManager dpm = getSystemService(DevicePolicyManager.class);
+            ComponentName adminComponent = new ComponentName(FreezeService.this, ShelterDeviceAdminReceiver.class);
+            for (String app : sAppToFreeze) {
+                boolean shouldFreeze = true;
+                UsageStats stats =  mUsageStats.get(app);
+                if (stats != null && mScreenLockTime - stats.getLastTimeUsed() <= APP_INACTIVE_TIMEOUT &&
+                        stats.getTotalTimeInForeground() >= APP_INACTIVE_TIMEOUT) {
+                    // Don't freeze foreground apps if requested
+                    shouldFreeze = false;
+                }
+
+                if (shouldFreeze) {
+                    dpm.setApplicationHidden(adminComponent, app, true);
+                }
+            }
+            sAppToFreeze.clear();
+        }
+    }
 
     @Override
     public void onCreate() {
